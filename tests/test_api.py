@@ -15,7 +15,7 @@ from __future__ import annotations
 import pytest
 import httpx
 
-BASE = "http://localhost:3001"
+BASE = "http://localhost:42069"
 TEST_SITE = "http://localhost:18931"
 
 

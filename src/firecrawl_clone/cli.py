@@ -115,20 +115,33 @@ def cmd_type(args):
 
 
 def cmd_wait(args):
-    """Wait for an element."""
+    """Wait for an element or URL change."""
+    params = {"timeout": args.timeout}
+    if args.url_change:
+        params["url_change"] = "true"
+        params["selector"] = ""  # dummy, not used
+    else:
+        params["selector"] = args.selector
     r = _client(args.api).post(
         f"/api/sessions/{args.session}/wait",
-        params={"selector": args.selector, "timeout": args.timeout},
+        params=params,
     )
     if r.status_code != 200:
         print(f"error: {r.text}", file=sys.stderr)
         sys.exit(1)
     data = r.json()
-    if data.get("found"):
-        print("found")
+    if args.url_change:
+        if data.get("found"):
+            print(f"url changed: {data.get('old_url', '')} -> {data.get('new_url', '')}")
+        else:
+            print(f"timeout: url still {data.get('url', '')}", file=sys.stderr)
+            sys.exit(1)
     else:
-        print("not found", file=sys.stderr)
-        sys.exit(1)
+        if data.get("found"):
+            print("found")
+        else:
+            print("not found", file=sys.stderr)
+            sys.exit(1)
 
 
 def cmd_screenshot(args):
@@ -171,6 +184,27 @@ def cmd_save_image(args):
         print(f"image saved to {args.output}")
     else:
         print(r.content, file=sys.stdout.buffer)
+
+
+def cmd_text(args):
+    """Get visible text from an element."""
+    r = _client(args.api).post(
+        f"/api/sessions/{args.session}/text",
+        params={"selector": args.selector},
+    )
+    if r.status_code != 200:
+        print(f"error: {r.text}", file=sys.stderr)
+        sys.exit(1)
+    print(r.json().get("text", ""))
+
+
+def cmd_url(args):
+    """Print current URL."""
+    r = _client(args.api).get(f"/api/sessions/{args.session}/url")
+    if r.status_code != 200:
+        print(f"error: {r.text}", file=sys.stderr)
+        sys.exit(1)
+    print(r.json().get("url", ""))
 
 
 def cmd_elements(args):
@@ -313,10 +347,11 @@ Examples:
     p.set_defaults(func=cmd_type)
 
     # wait
-    p = sub.add_parser("wait", help="Wait for element")
+    p = sub.add_parser("wait", help="Wait for element or URL change")
     p.add_argument("-s", "--session", required=True)
-    p.add_argument("selector")
+    p.add_argument("selector", nargs="?", default="", help="CSS selector (omit with --url-change)")
     p.add_argument("-t", "--timeout", type=int, default=10)
+    p.add_argument("--url-change", action="store_true", help="Wait for URL to change instead")
     p.set_defaults(func=cmd_wait)
 
     # screenshot
@@ -353,6 +388,17 @@ Examples:
     p.add_argument("-s", "--session", required=True)
     p.add_argument("selector")
     p.set_defaults(func=cmd_query)
+
+    # text
+    p = sub.add_parser("text", help="Get visible text from element")
+    p.add_argument("-s", "--session", required=True)
+    p.add_argument("selector")
+    p.set_defaults(func=cmd_text)
+
+    # url
+    p = sub.add_parser("url", help="Print current URL")
+    p.add_argument("-s", "--session", required=True)
+    p.set_defaults(func=cmd_url)
 
     # back
     p = sub.add_parser("back", help="Go back")

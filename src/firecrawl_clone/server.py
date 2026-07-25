@@ -108,10 +108,10 @@ async def type_session(name: str, selector: str = Query(...), text: str = Query(
 
 
 @app.post("/api/sessions/{name}/wait")
-async def wait_session(name: str, selector: str = Query(...), timeout: int = Query(10)):
-    """Wait for an element by CSS selector."""
+async def wait_session(name: str, selector: str = Query(""), timeout: int = Query(10), url_change: bool = Query(False)):
+    """Wait for an element by CSS selector, or wait for URL to change."""
     try:
-        result = await SessionManager.wait_for(name, selector, timeout)
+        result = await SessionManager.wait_for(name, selector, timeout, url_change)
         return result
     except Exception as e:
         raise HTTPException(500, str(e))
@@ -143,6 +143,26 @@ async def query_session(name: str, selector: str = Query(...)):
     try:
         results = await SessionManager.query(name, selector)
         return {"ok": True, "results": results}
+    except Exception as e:
+        raise HTTPException(500, str(e))
+
+
+@app.post("/api/sessions/{name}/text")
+async def text_session(name: str, selector: str = Query(...)):
+    """Get visible text from an element."""
+    try:
+        text = await SessionManager.get_text(name, selector)
+        return {"ok": True, "text": text}
+    except Exception as e:
+        raise HTTPException(500, str(e))
+
+
+@app.get("/api/sessions/{name}/url")
+async def url_session(name: str):
+    """Get the current URL of the session."""
+    try:
+        url = await SessionManager.get_url(name)
+        return {"ok": True, "url": url}
     except Exception as e:
         raise HTTPException(500, str(e))
 

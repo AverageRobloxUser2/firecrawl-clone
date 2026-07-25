@@ -184,10 +184,21 @@ class SessionManager:
             return {"ok": False, "error": str(e)}
 
     @classmethod
-    async def wait_for(cls, name: str, selector: str, timeout: int = 10) -> dict[str, Any]:
+    async def wait_for(cls, name: str, selector: str, timeout: int = 10, url_change: bool = False) -> dict[str, Any]:
         session = cls.get(name)
         if not session:
             raise BrowserError(f"Session not found: {name}")
+        if url_change:
+            # Wait until URL changes from current
+            current_url = session.tab.url or ""
+            elapsed = 0
+            while elapsed < timeout:
+                await asyncio.sleep(0.5)
+                elapsed += 0.5
+                new_url = session.tab.url or ""
+                if new_url != current_url:
+                    return {"ok": True, "found": True, "old_url": current_url, "new_url": new_url}
+            return {"ok": True, "found": False, "url": current_url, "message": "url did not change"}
         try:
             el = await session.tab.select(selector, timeout=timeout)
             return {"ok": True, "found": el is not None, "selector": selector}
@@ -203,6 +214,23 @@ class SessionManager:
         path = _ensure_dir() / f"screenshot-{session.name}-{uuid.uuid4().hex[:8]}.png"
         await session.tab.save_screenshot(str(path))
         return path.read_bytes()
+
+    @classmethod
+    async def get_text(cls, name: str, selector: str) -> str:
+        """Get visible text from an element matching a CSS selector."""
+        session = cls.get(name)
+        if not session:
+            raise BrowserError(f"Session not found: {name}")
+        text = await session.tab.evaluate(f"(document.querySelector('{selector.replace(chr(39), chr(92)+chr(39))}'))?.innerText?.trim() || ''")
+        return text or ""
+
+    @classmethod
+    async def get_url(cls, name: str) -> str:
+        """Get the current URL of the session."""
+        session = cls.get(name)
+        if not session:
+            raise BrowserError(f"Session not found: {name}")
+        return session.tab.url or ""
 
     @classmethod
     async def get_links(cls, name: str) -> list[dict[str, str]]:

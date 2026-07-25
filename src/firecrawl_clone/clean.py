@@ -91,11 +91,67 @@ def _replace_image_urls(html: str, base_url: str) -> tuple[str, dict[str, str]]:
     return str(soup), image_map
 
 
+def _annotate_interactive(html: str) -> str:
+    """Annotate interactive elements (buttons, inputs, selects) with their selectors in the HTML.
+    
+    Inserts a data attribute on interactive elements so markdown conversion can include them.
+    Returns modified HTML.
+    """
+    soup = BeautifulSoup(html, "lxml")
+    for el in soup.find_all(['button', 'input', 'select', 'textarea']):
+        # Build a useful selector
+        tag = el.name
+        el_id = el.get('id', '')
+        name = el.get('name', '')
+        el_type = el.get('type', '')
+        
+        if el_id:
+            selector = f"#{el_id}"
+        elif name:
+            selector = f"{tag}[name=\"{name}\"]"
+        else:
+            selector = f"{tag}"
+        
+        # Skip hidden inputs
+        if el_type and el_type.lower() == 'hidden':
+            continue
+        
+        # Get visible text
+        if tag == 'button':
+            text = (el.get_text(strip=True) or '').strip()
+            label = f"[{tag}: {selector}] {text}"
+        elif tag == 'input':
+            if el_type and el_type.lower() in ('submit', 'button'):
+                text = el.get('value', '') or el.get('alt', '')
+                label = f"[{tag} {el_type}: {selector}] {text}"
+            elif el_type and el_type.lower() in ('checkbox', 'radio'):
+                label = f"[{tag} {el_type}: {selector}]"
+            else:
+                placeholder = el.get('placeholder', '')
+                label = f"[{tag} {el_type}: {selector}] {placeholder}"
+        elif tag == 'select':
+            label = f"[{tag}: {selector}]"
+        elif tag == 'textarea':
+            placeholder = el.get('placeholder', '')
+            label = f"[{tag}: {selector}] {placeholder}"
+        else:
+            continue
+        
+        # Insert label before the element
+        from bs4 import NavigableString
+        wrapper = soup.new_tag('span')
+        wrapper.string = label
+        el.replace_with(wrapper)
+    
+    return str(soup)
+
+
 def html_to_markdown(html: str, base_url: str = "", clean: bool = True) -> tuple[str, dict[str, str]]:
     """Convert HTML to markdown, replacing image URLs with UUIDs.
     
     Returns (markdown, image_map) where image_map is {uuid: original_url}.
     The markdown will have ![alt](__IMG_{uuid}__) references.
+    Interactive elements (buttons, inputs) are annotated inline.
     """
     try:
         if clean:
@@ -103,6 +159,9 @@ def html_to_markdown(html: str, base_url: str = "", clean: bool = True) -> tuple
 
         # extract image URLs and replace with UUIDs
         html, image_map = _replace_image_urls(html, base_url)
+
+        # annotate interactive elements before markdown conversion
+        html = _annotate_interactive(html)
 
         markdown = md(html, heading_style="ATX")
         return markdown, image_map

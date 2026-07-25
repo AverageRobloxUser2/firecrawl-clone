@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Firecrawl Test Page</title>
+    <style>
+        /* this should be stripped in markdown */
+        body { font-family: sans-serif; }
+        .hidden { display: none; }
+    </style>
+    <script>
+        // this should also be stripped
+        console.log("test script");
+    </script>
+</head>
+<body>
+    <nav class="navigation">
+        <a href="/home">Home</a>
+        <a href="/about">About</a>
+    </nav>
+
+    <main id="main-content">
+        <h1>Firecrawl Clone Test Page</h1>
+        <p>This is a <strong>test paragraph</strong> with some <em>formatting</em>.</p>
+        <p>Another paragraph with a <a href="https://example.com">link to example.com</a>.</p>
+
+        <ul>
+            <li>First item</li>
+            <li>Second item</li>
+            <li>Third item</li>
+        </ul>
+
+        <div id="button-container">
+            <button id="test-button" onclick="document.getElementById('hidden-msg').style.display='block'">
+                Click Me
+            </button>
+            <p id="hidden-msg" style="display:none">This message was hidden!</p>
+        </div>
+
+        <div id="form-section">
+            <input type="text" id="test-input" placeholder="Type something...">
+        </div>
+
+        <img src="https://www.gravatar.com/avatar/00000000000000000000000000000000?d=mp&s=40" alt="test image">
+    </main>
+
+    <footer class="footer">
+        <p>Footer content — should be stripped</p>
+    </footer>
+</body>
+</html>

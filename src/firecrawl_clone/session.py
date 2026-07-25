@@ -179,6 +179,18 @@ class SessionManager:
                 return {"ok": False, "error": f"No element matched: {selector}"}
             await el.clear_input()
             await el.send_keys(text)
+            # Dispatch input events for JS framework reactivity
+            safe_sel = selector.replace("'", "\\'")
+            await session.tab.evaluate(f"""
+                (function() {{
+                    var el = document.querySelector('{safe_sel}');
+                    if (el) {{
+                        ['focus','input','keyup','change'].forEach(function(e) {{
+                            el.dispatchEvent(new Event(e, {{bubbles:true}}));
+                        }});
+                    }}
+                }})()"""
+            )
             return {"ok": True, "message": f"typed into {selector}"}
         except Exception as e:
             return {"ok": False, "error": str(e)}
@@ -189,13 +201,13 @@ class SessionManager:
         if not session:
             raise BrowserError(f"Session not found: {name}")
         if url_change:
-            # Wait until URL changes from current
-            current_url = session.tab.url or ""
+            # Wait until URL changes from current (via JS eval, tab.url is stale)
+            current_url = await session.tab.evaluate("window.location.href")
             elapsed = 0
             while elapsed < timeout:
                 await asyncio.sleep(0.5)
                 elapsed += 0.5
-                new_url = session.tab.url or ""
+                new_url = await session.tab.evaluate("window.location.href")
                 if new_url != current_url:
                     return {"ok": True, "found": True, "old_url": current_url, "new_url": new_url}
             return {"ok": True, "found": False, "url": current_url, "message": "url did not change"}
@@ -226,11 +238,11 @@ class SessionManager:
 
     @classmethod
     async def get_url(cls, name: str) -> str:
-        """Get the current URL of the session."""
+        """Get the current URL of the session via JS (tab.url can be stale)."""
         session = cls.get(name)
         if not session:
             raise BrowserError(f"Session not found: {name}")
-        return session.tab.url or ""
+        return await session.tab.evaluate("window.location.href")
 
     @classmethod
     async def get_links(cls, name: str) -> list[dict[str, str]]:

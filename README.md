@@ -87,7 +87,7 @@ firecrawl navigate -s bot:2 "https://other.com"     # tab 2
 
 | Variable | Default | Description |
 |---|---|---|
-| `FIRECRAWL_API` | `http://192.168.32.71:42069` | API server URL for CLI |
+| `FIRECRAWL_API` | `http://localhost:42069` | API server URL for CLI |
 | `FIRECRAWL_HEADLESS` | `false` | Run browser headless (`true`/`1`/`yes`) |
 
 ## API Endpoints

@@ -25,7 +25,7 @@ from pathlib import Path
 
 import httpx
 
-DEFAULT_API = os.environ.get("FIRECRAWL_API", "http://192.168.32.71:42069")
+DEFAULT_API = os.environ.get("FIRECRAWL_API", "http://localhost:42069")
 
 
 def _client(base: str) -> httpx.Client:

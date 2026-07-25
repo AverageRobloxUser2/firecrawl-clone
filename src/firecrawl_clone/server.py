@@ -117,6 +117,51 @@ async def wait_session(name: str, selector: str = Query(...), timeout: int = Que
         raise HTTPException(500, str(e))
 
 
+@app.get("/api/sessions/{name}/elements")
+async def elements_session(name: str):
+    """Get interactive elements (inputs, buttons, selects, textareas) on current page."""
+    try:
+        elements = await SessionManager.get_elements(name)
+        return {"ok": True, "elements": elements}
+    except Exception as e:
+        raise HTTPException(500, str(e))
+
+
+@app.post("/api/sessions/{name}/evaluate")
+async def evaluate_session(name: str, script: str = Query(...)):
+    """Evaluate JavaScript in the session's tab."""
+    try:
+        result = await SessionManager.evaluate(name, script)
+        return {"ok": True, "result": result}
+    except Exception as e:
+        raise HTTPException(500, str(e))
+
+
+@app.post("/api/sessions/{name}/query")
+async def query_session(name: str, selector: str = Query(...)):
+    """Query DOM for elements matching a CSS selector."""
+    try:
+        results = await SessionManager.query(name, selector)
+        return {"ok": True, "results": results}
+    except Exception as e:
+        raise HTTPException(500, str(e))
+
+
+@app.post("/api/sessions/{name}/evaluate")
+async def evaluate_session(name: str, script: str = Query(...)):
+    """Evaluate JavaScript in the session's tab."""
+    try:
+        session = SessionManager.get(name)
+        if not session:
+            raise HTTPException(404, f"Session not found: {name}")
+        result = await session.tab.evaluate(script)
+        return {"ok": True, "result": result}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(500, str(e))
+
+
 # ── content ────────────────────────────────────────────────────
 
 @app.get("/api/sessions/{name}/screenshot")

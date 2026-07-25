@@ -212,6 +212,48 @@ class SessionManager:
         return await cls._extract_links(session.tab)
 
     @classmethod
+    async def get_elements(cls, name: str) -> list[dict[str, Any]]:
+        """Extract interactive elements (inputs, buttons, selects, textareas) from current page."""
+        session = cls.get(name)
+        if not session:
+            raise BrowserError(f"Session not found: {name}")
+        raw = await session.tab.evaluate("""
+            JSON.stringify(Array.from(document.querySelectorAll('input, button, select, textarea, [role=button], [role=textbox], [role=checkbox], [role=radio]')).map(el => ({
+                tag: el.tagName.toLowerCase(),
+                type: el.type || null,
+                name: el.name || null,
+                id: el.id || null,
+                placeholder: el.placeholder || null,
+                value: (el.tagName.toLowerCase() === 'button' || el.tagName.toLowerCase() === 'select') ? el.textContent?.trim() : (el.value || null),
+                disabled: el.disabled,
+                checked: el.checked || null,
+                role: el.getAttribute('role') || null,
+                selector: el.id ? `#${el.id}` : `${el.tagName.toLowerCase()}[name="${el.name || ''}"]`
+            })))
+        """)
+        return json.loads(raw or "[]")
+
+    @classmethod
+    async def evaluate(cls, name: str, script: str) -> Any:
+        """Evaluate JavaScript in the session's tab."""
+        session = cls.get(name)
+        if not session:
+            raise BrowserError(f"Session not found: {name}")
+        return await session.tab.evaluate(script)
+
+    @classmethod
+    async def query(cls, name: str, selector: str) -> list[dict[str, Any]]:
+        """Query the DOM for elements matching a CSS selector."""
+        session = cls.get(name)
+        if not session:
+            raise BrowserError(f"Session not found: {name}")
+        # Escape selector for JS string literal
+        safe = selector.replace("\\", "\\\\").replace("'", "\\'").replace('"', '\\"')
+        js = f"var sel='{safe}';JSON.stringify(Array.from(document.querySelectorAll(sel)).map(function(el){{return{{tag:el.tagName.toLowerCase(),text:(el.innerText||el.textContent||'').trim().substring(0,200),html:el.innerHTML?el.innerHTML.substring(0,500):null,attributes:Object.fromEntries(Array.from(el.attributes).map(function(a){{return[a.name,a.value]}})),href:el.href||null,src:el.src||null,value:el.value||null}}}}))" 
+        raw = await session.tab.evaluate(js)
+        return json.loads(raw or "[]")
+
+    @classmethod
     async def save_image(cls, name: str, img_uuid: str) -> tuple[bytes, str] | None:
         session = cls.get(name)
         if not session:

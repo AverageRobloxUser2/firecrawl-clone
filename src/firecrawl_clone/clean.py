@@ -20,7 +20,6 @@ _STRIP_TAGS: set[str] = {
     "footer",
     "header",
     "aside",
-    "form",
     "svg",
 }
 

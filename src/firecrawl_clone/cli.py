@@ -173,6 +173,66 @@ def cmd_save_image(args):
         print(r.content, file=sys.stdout.buffer)
 
 
+def cmd_elements(args):
+    """List interactive elements on the page."""
+    r = _client(args.api).get(f"/api/sessions/{args.session}/elements")
+    if r.status_code != 200:
+        print(f"error: {r.text}", file=sys.stderr)
+        sys.exit(1)
+    for el in r.json().get("elements", []):
+        tag = el.get("tag", "")
+        typ = el.get("type", "")
+        name = el.get("name", "")
+        placeholder = el.get("placeholder", "")
+        value = el.get("value", "")
+        sel = el.get("selector", "")
+        label = f"<{tag}" 
+        if typ:
+            label += f" type={typ}"
+        if name:
+            label += f" name={name}"
+        if placeholder:
+            label += f" placeholder={placeholder}"
+        label += ">"
+        print(f"{label}  [{sel}]")
+        if value:
+            print(f"  value: {value}")
+
+
+def cmd_evaluate(args):
+    """Evaluate JavaScript on the current page."""
+    r = _client(args.api).post(
+        f"/api/sessions/{args.session}/evaluate",
+        params={"script": args.script},
+    )
+    if r.status_code != 200:
+        print(f"error: {r.text}", file=sys.stderr)
+        sys.exit(1)
+    data = r.json()
+    result = data.get("result")
+    if isinstance(result, (dict, list)):
+        print(json.dumps(result, indent=2))
+    else:
+        print(result)
+
+
+def cmd_query(args):
+    """Query DOM elements by CSS selector."""
+    r = _client(args.api).post(
+        f"/api/sessions/{args.session}/query",
+        params={"selector": args.selector},
+    )
+    if r.status_code != 200:
+        print(f"error: {r.text}", file=sys.stderr)
+        sys.exit(1)
+    for el in r.json().get("results", []):
+        tag = el.get("tag", "")
+        text = el.get("text", "")
+        attrs = el.get("attributes", {})
+        attr_str = " ".join(f'{k}="{v}"' for k, v in attrs.items() if k not in ("class", "style"))
+        print(f"<{tag} {attr_str.strip()}> {text[:100]}")
+
+
 def cmd_back(args):
     """Go back, print markdown."""
     r = _client(args.api).post(f"/api/sessions/{args.session}/back")
@@ -205,6 +265,9 @@ Examples:
   firecrawl click -s bot "button[type=submit]"
   firecrawl screenshot -s bot -o page.png
   firecrawl links -s bot
+  firecrawl elements -s bot
+  firecrawl query -s bot "input[type=email]"
+  firecrawl evaluate -s bot "document.title"
   firecrawl save-image -s bot <uuid> -o img.png
   firecrawl session close bot
 """,
@@ -273,6 +336,23 @@ Examples:
     p.add_argument("uuid")
     p.add_argument("-o", "--output", help="Save to file")
     p.set_defaults(func=cmd_save_image)
+
+    # elements
+    p = sub.add_parser("elements", help="List interactive elements")
+    p.add_argument("-s", "--session", required=True)
+    p.set_defaults(func=cmd_elements)
+
+    # evaluate
+    p = sub.add_parser("evaluate", help="Evaluate JavaScript")
+    p.add_argument("-s", "--session", required=True)
+    p.add_argument("script")
+    p.set_defaults(func=cmd_evaluate)
+
+    # query
+    p = sub.add_parser("query", help="Query DOM by CSS selector")
+    p.add_argument("-s", "--session", required=True)
+    p.add_argument("selector")
+    p.set_defaults(func=cmd_query)
 
     # back
     p = sub.add_parser("back", help="Go back")

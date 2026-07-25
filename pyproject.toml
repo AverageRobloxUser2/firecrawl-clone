@@ -18,7 +18,8 @@ dev = [
 ]
 
 [project.scripts]
-firecrawl = "firecrawl_clone.__main__:main"
+firecrawl = "firecrawl_clone.cli:main"
+firecrawl-stdio = "firecrawl_clone.__main__:main"
 firecrawl-api = "firecrawl_clone.server:run_server"
 
 [build-system]

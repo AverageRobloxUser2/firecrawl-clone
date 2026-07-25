@@ -3,14 +3,14 @@
 
 Usage:
     firecrawl session create mybot
-    firecrawl navigate -s mybot "https://example.com"
-    firecrawl click -s mybot "#login"
-    firecrawl type -s mybot "#pass" "secret"
-    firecrawl screenshot -s mybot -o page.png
-    firecrawl links -s mybot
-    firecrawl save-image -s mybot <uuid> -o photo.png
-    firecrawl action-log on -s mybot
-    firecrawl action-log export -s mybot -o trace.json
+    firecrawl navigate -s mybot:1 "https://example.com"
+    firecrawl click -s mybot:1 "#login"
+    firecrawl type -s mybot:1 "#pass" "secret"
+    firecrawl screenshot -s mybot:1 -o page.png
+    firecrawl links -s mybot:1
+    firecrawl save-image -s mybot:1 <uuid> -o photo.png
+    firecrawl action-log on -s mybot:1
+    firecrawl action-log export -s mybot:1 -o trace.json
     firecrawl session close mybot
     firecrawl session list
 """
@@ -447,24 +447,23 @@ Examples:
   firecrawl session create bot
   firecrawl session list-tabs bot
   firecrawl session add-tab bot "https://example.com"
-  firecrawl session switch bot 2
-  firecrawl navigate -s bot "https://example.com"
+  firecrawl navigate -s bot:1 "https://example.com"
   firecrawl navigate -s bot:2 "https://other.com"     # specific tab
-  firecrawl click -s bot "#search"
-  firecrawl click -s bot --text "Sign In"              # click by text
-  firecrawl type -s bot "#q" "hello world"
-  firecrawl wait -s bot --url-change                    # wait for navigation
-  firecrawl loading -s bot                              # page load state
-  firecrawl screenshot -s bot                           # auto-saves to /tmp/
-  firecrawl screenshot -s bot -o page.png               # custom path
-  firecrawl links -s bot
-  firecrawl elements -s bot
-  firecrawl query -s bot "input[type=email]"
-  firecrawl evaluate -s bot "document.title"
-  firecrawl save-image -s bot <uuid> -o img.png
-  firecrawl action-log on -s bot                            # start action logging
-  firecrawl navigate -s bot "https://app.example.com"       # actions auto-log
-  firecrawl action-log export -s bot -o trace.json          # export with initiator stacks
+  firecrawl click -s bot:1 "#search"
+  firecrawl click -s bot:1 --text "Sign In"            # click by text
+  firecrawl type -s bot:1 "#q" "hello world"
+  firecrawl wait -s bot:1 --url-change                  # wait for navigation
+  firecrawl loading -s bot:1                            # page load state
+  firecrawl screenshot -s bot:1                         # auto-saves to /tmp/
+  firecrawl screenshot -s bot:1 -o page.png             # custom path
+  firecrawl links -s bot:1
+  firecrawl elements -s bot:1
+  firecrawl query -s bot:1 "input[type=email]"
+  firecrawl evaluate -s bot:1 "document.title"
+  firecrawl save-image -s bot:1 <uuid> -o img.png
+  firecrawl action-log on -s bot:1                      # start action logging
+  firecrawl navigate -s bot:1 "https://app.example.com" # actions auto-log
+  firecrawl action-log export -s bot:1 -o trace.json    # export with initiator stacks
   firecrawl session close bot
 """
     )

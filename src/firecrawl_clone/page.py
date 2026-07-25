@@ -48,9 +48,10 @@ def _guess_ext(url: str) -> str:
     return ".png"
 
 
-async def _download_images(image_map: dict[str, str]) -> dict[str, str]:
+async def _download_images(image_map: dict[str, str], tab=None) -> dict[str, str]:
     """Download images from URL map. Returns {uuid: local_path}."""
-    tab = await Browser.get_tab()
+    if tab is None:
+        tab = await Browser.get_tab()
     downloaded: dict[str, str] = {}
 
     for img_uuid, url in image_map.items():

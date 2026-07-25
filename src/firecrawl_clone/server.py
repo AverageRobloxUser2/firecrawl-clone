@@ -164,6 +164,16 @@ async def text_session(name: str, selector: str = Query(...)):
         raise HTTPException(500, str(e))
 
 
+@app.get("/api/sessions/{name}/url")
+async def url_session(name: str):
+    """Get the current URL of the session."""
+    try:
+        url = await SessionManager.get_url(name)
+        return {"url": url}
+    except Exception as e:
+        raise HTTPException(500, str(e))
+
+
 # ── content ────────────────────────────────────────────────────
 
 @app.get("/api/sessions/{name}/screenshot")

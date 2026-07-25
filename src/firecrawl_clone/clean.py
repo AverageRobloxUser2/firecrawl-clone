@@ -11,48 +11,20 @@ from markdownify import markdownify as md
 from .errors import ScrapingError
 
 # tags to strip entirely (content + tag)
+# script/style/noscript = not content
+# iframe = separate document context
+# svg = vector graphics, not text
 _STRIP_TAGS: set[str] = {
     "script",
     "style",
     "noscript",
     "iframe",
-    "nav",
-    "footer",
-    "header",
-    "aside",
     "svg",
 }
 
-# common nav/footer class hints — best effort
-_NAV_CLASSES: set[str] = {
-    "nav",
-    "navigation",
-    "menu",
-    "sidebar",
-    "footer",
-    "breadcrumb",
-    "cookie",
-    "popup",
-    "modal",
-    "ad",
-    "advertisement",
-    "banner",
-}
-
-
 def _is_noise(element: Tag) -> bool:
-    """Heuristic: is this element likely noise (nav, ads, etc.)?"""
-    if element.name in _STRIP_TAGS:
-        return True
-    if element.attrs is None:
-        return False
-    classes = element.get("class", [])
-    if isinstance(classes, list):
-        class_str = " ".join(classes).lower()
-        for hint in _NAV_CLASSES:
-            if hint in class_str:
-                return True
-    return False
+    """Check if element tag should be stripped (script, style, nav, footer, etc.)."""
+    return element.name in _STRIP_TAGS
 
 
 def clean_html(html: str) -> str:

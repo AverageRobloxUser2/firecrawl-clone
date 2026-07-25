@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 import nodriver as nd
@@ -56,8 +57,9 @@ class Browser:
                 args.append(f"--load-extension={ext}")
 
             try:
+                headless = os.environ.get("FIRECRAWL_HEADLESS", "false").lower() in ("1", "true", "yes")
                 cls._instance = await nd.start(
-                    headless=False,
+                    headless=headless,
                     browser_args=args,
                 )
             except Exception as e:
@@ -73,6 +75,13 @@ class Browser:
         (separate cookies), separate browser profiles would be needed."""
         browser = await cls.start()
         return await browser.get(url, new_tab=True)
+
+    @classmethod
+    async def list_tabs(cls) -> list[nd.Tab]:
+        """List all open tabs in the browser."""
+        browser = await cls.start()
+        await browser.update_targets()
+        return list(browser.tabs)
 
     @classmethod
     def get_browser(cls) -> nd.Browser | None:

@@ -31,9 +31,23 @@ class Browser:
         cls._extensions.append(str(path))
 
     @classmethod
+    async def _is_alive(cls) -> bool:
+        """Check if the browser is alive by sending a CDP command."""
+        if cls._instance is None:
+            return False
+        try:
+            # update_targets() sends Target.getTargets CDP command.
+            # succeeds if ws is alive, raises if dead.
+            await cls._instance.update_targets()
+            return True
+        except Exception:
+            return False
+
+    @classmethod
     async def start(cls) -> nd.Browser:
         """Start the browser if not already running. Return the browser instance."""
-        if cls._instance is None:
+        if not await cls._is_alive():
+            cls._instance = None  # clear dead reference
             args = [
                 "--disable-gpu",
                 "--disable-dev-shm-usage",
@@ -52,9 +66,13 @@ class Browser:
 
     @classmethod
     async def new_tab(cls, url: str = "data:text/html,<html><body></body></html>") -> nd.Tab:
-        """Create a new tab in the browser. Starts browser if needed."""
+        """Create a new tab in the browser. Starts browser if needed.
+        
+        Uses new_tab=True to create a fresh tab each time. Cookie/storage
+        is shared across tabs in the same browser — for true session isolation
+        (separate cookies), separate browser profiles would be needed."""
         browser = await cls.start()
-        return await browser.get(url)
+        return await browser.get(url, new_tab=True)
 
     @classmethod
     def get_browser(cls) -> nd.Browser | None:

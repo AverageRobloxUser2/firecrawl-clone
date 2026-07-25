@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import uuid
+from urllib.parse import urljoin
+
 from bs4 import BeautifulSoup, Tag
 from markdownify import markdownify as md
 
@@ -60,7 +63,6 @@ def clean_html(html: str) -> str:
     except Exception as e:
         raise ScrapingError(f"Failed to parse HTML: {e}") from e
 
-    # remove known noise tags
     for tag in soup.find_all():
         if _is_noise(tag):
             tag.decompose()
@@ -68,11 +70,42 @@ def clean_html(html: str) -> str:
     return str(soup)
 
 
-def html_to_markdown(html: str, clean: bool = True) -> str:
-    """Convert HTML to markdown. Optionally clean first."""
+def _replace_image_urls(html: str, base_url: str) -> tuple[str, dict[str, str]]:
+    """Replace <img> src URLs with UUID placeholders.
+    
+    Returns (modified_html, {uuid: original_url, ...}).
+    """
+    soup = BeautifulSoup(html, "lxml")
+    image_map: dict[str, str] = {}
+
+    for img in soup.find_all("img"):
+        src = img.get("src") or img.get("data-src")
+        if not src:
+            continue
+        abs_url = urljoin(base_url, src)
+        img_uuid = uuid.uuid4().hex[:16]
+        alt = img.get("alt", "")
+        # replace src with local UUID reference
+        img["src"] = f"__IMG_{img_uuid}__"
+        image_map[img_uuid] = abs_url
+
+    return str(soup), image_map
+
+
+def html_to_markdown(html: str, base_url: str = "", clean: bool = True) -> tuple[str, dict[str, str]]:
+    """Convert HTML to markdown, replacing image URLs with UUIDs.
+    
+    Returns (markdown, image_map) where image_map is {uuid: original_url}.
+    The markdown will have ![alt](__IMG_{uuid}__) references.
+    """
     try:
         if clean:
             html = clean_html(html)
-        return md(html, heading_style="ATX")
+
+        # extract image URLs and replace with UUIDs
+        html, image_map = _replace_image_urls(html, base_url)
+
+        markdown = md(html, heading_style="ATX")
+        return markdown, image_map
     except Exception as e:
         raise ScrapingError(f"Failed to convert to markdown: {e}") from e

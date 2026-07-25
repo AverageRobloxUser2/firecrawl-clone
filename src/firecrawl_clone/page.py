@@ -2,15 +2,17 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
-
+import base64
 import json
+import uuid
+from dataclasses import dataclass, field
+
 import nodriver as nd
 
 from .browser import Browser
 from .clean import html_to_markdown
 from .errors import NavigationError, SelectorError, ScrapingError
-from .images import find_page_images
+from .images import _ensure_dir
 from .protocol import Link
 
 
@@ -19,7 +21,7 @@ class PageResult:
     """Result of a page operation that returns content."""
     markdown: str
     links: list[Link]
-    images: list[str]
+    images: dict[str, str] = field(default_factory=dict)  # uuid -> local path
     title: str = ""
 
 
@@ -35,18 +37,69 @@ async def _extract_links(tab) -> list[Link]:
     return [Link(url=item["url"], text=item["text"]) for item in links_data]
 
 
+def _guess_ext(url: str) -> str:
+    """Guess file extension from URL."""
+    parts = url.rsplit(".", 1)
+    if len(parts) == 2:
+        ext = parts[1].split("?")[0].split("&")[0].lower()
+        known = {"jpg", "jpeg", "png", "gif", "webp", "svg", "bmp"}
+        if ext in known:
+            return f".{ext}"
+    return ".png"
+
+
+async def _download_images(image_map: dict[str, str]) -> dict[str, str]:
+    """Download images from URL map. Returns {uuid: local_path}."""
+    tab = await Browser.get_tab()
+    downloaded: dict[str, str] = {}
+
+    for img_uuid, url in image_map.items():
+        try:
+            ext = _guess_ext(url)
+            path = _ensure_dir() / f"{img_uuid}{ext}"
+            # escape URL for JS string
+            safe_url = url.replace("\\", "\\\\").replace("'", "\\'")
+            b64 = await tab.evaluate(
+                f"(async () => {{ const r = await fetch('{safe_url}'); const buf = await r.arrayBuffer(); return btoa(String.fromCharCode(...new Uint8Array(buf))); }})()",
+                await_promise=True,
+            )
+            data = base64.b64decode(b64)
+            path.write_bytes(data)
+            downloaded[img_uuid] = str(path)
+        except Exception:
+            continue  # skip failed images
+
+    return downloaded
+
+
+async def _resolve_markdown_images(markdown: str, image_map: dict[str, str]) -> str:
+    """Replace __IMG_{uuid}__ placeholders with local paths in markdown."""
+    for img_uuid, path in image_map.items():
+        markdown = markdown.replace(f"__IMG_{img_uuid}__", path)
+    return markdown
+
+
 async def _get_page_content(tab) -> PageResult:
     """Extract markdown, links, and images from the current page."""
     await tab  # wait for page to settle
 
     title = await tab.evaluate("document.title") or ""
+    page_url = tab.url or ""
     html = await tab.get_content()
-    markdown = html_to_markdown(html, clean=True)
+
+    # convert HTML to markdown, get image UUIDs
+    markdown, image_urls = html_to_markdown(html, base_url=page_url, clean=True)
+
+    # download images via browser (carries cookies)
+    if image_urls:
+        downloaded = await _download_images(image_urls)
+        markdown = await _resolve_markdown_images(markdown, downloaded)
+    else:
+        downloaded = {}
 
     links = await _extract_links(tab)
-    images = await find_page_images(tab)
 
-    return PageResult(markdown=markdown, links=links, images=images, title=title)
+    return PageResult(markdown=markdown, links=links, images=downloaded, title=title)
 
 
 async def navigate(url: str) -> PageResult:
@@ -107,16 +160,36 @@ async def wait_for(selector: str, timeout: int = 10) -> bool:
 
 async def screenshot() -> str:
     """Take a screenshot of the current page. Return path to saved PNG."""
-    from .images import _ensure_dir
-
     tab = await Browser.get_tab()
-    path = _ensure_dir() / f"screenshot-{tab.url.replace('://', '_').replace('/', '_')[:50]}.png"
+    path = _ensure_dir() / f"screenshot-{uuid.uuid4().hex}.png"
 
     try:
         await tab.save_screenshot(str(path))
         return str(path)
     except Exception as e:
         raise ScrapingError(f"Screenshot failed: {e}") from e
+
+
+async def save_image(url: str) -> str:
+    """Download an image through the browser (uses cookies/session).
+    
+    Uses JS fetch() in browser context — carries all cookies, auth, etc.
+    """
+    tab = await Browser.get_tab()
+    ext = _guess_ext(url)
+    path = _ensure_dir() / f"img-{uuid.uuid4().hex}{ext}"
+
+    try:
+        safe_url = url.replace("\\", "\\\\").replace("'", "\\'")
+        b64 = await tab.evaluate(
+            f"(async () => {{ const r = await fetch('{safe_url}'); const buf = await r.arrayBuffer(); return btoa(String.fromCharCode(...new Uint8Array(buf))); }})()",
+            await_promise=True,
+        )
+        data = base64.b64decode(b64)
+        path.write_bytes(data)
+        return str(path)
+    except Exception as e:
+        raise ScrapingError(f"Failed to save image {url}: {e}") from e
 
 
 async def get_links() -> list[Link]:

@@ -32,6 +32,15 @@ class TestCleanHTML:
 
     def test_html_to_markdown(self):
         html = '<h1>Title</h1><p>Para with <strong>bold</strong>.</p>'
-        md = html_to_markdown(html)
+        md, img_map = html_to_markdown(html)
         assert "# Title" in md
         assert "**bold**" in md
+        assert img_map == {}  # no images
+
+    def test_html_to_markdown_images(self):
+        html = '<body><img src="https://example.com/photo.jpg" alt="photo"></body>'
+        md, img_map = html_to_markdown(html, base_url="https://example.com")
+        assert len(img_map) == 1
+        uuid_key = list(img_map.keys())[0]
+        assert img_map[uuid_key] == "https://example.com/photo.jpg"
+        assert f"__IMG_{uuid_key}__" in md

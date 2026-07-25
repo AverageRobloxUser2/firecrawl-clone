@@ -7,27 +7,14 @@ import sys
 
 from .browser import Browser
 from .errors import FirecrawlError
-from .page import navigate, click, type_text, wait_for, screenshot, get_links, go_back
+from .page import navigate, click, type_text, wait_for, screenshot, save_image, get_links, go_back
 from .protocol import Command, ErrorResponse, SuccessResponse
-
-
-# command dispatch table
-HANDLERS = {
-    "navigate": _handle_navigate,
-    "click": _handle_click,
-    "type": _handle_type,
-    "wait": _handle_wait,
-    "screenshot": _handle_screenshot,
-    "get_links": _handle_get_links,
-    "back": _handle_back,
-    "quit": _handle_quit,
-}
 
 
 # ── handlers ───────────────────────────────────────────────────
 
 async def _handle_navigate(cmd: Command) -> SuccessResponse:
-    result = await navigate(cmd.params["url"], cmd.params.get("timeout", 30))
+    result = await navigate(cmd.params["url"])
     return SuccessResponse(
         markdown=result.markdown,
         links=result.links,
@@ -63,6 +50,11 @@ async def _handle_screenshot(cmd: Command) -> SuccessResponse:
     return SuccessResponse(path=path, message=f"screenshot saved to {path}")
 
 
+async def _handle_save_image(cmd: Command) -> SuccessResponse:
+    path = await save_image(cmd.params["url"])
+    return SuccessResponse(path=path, message=f"saved image to {path}")
+
+
 async def _handle_get_links(cmd: Command) -> SuccessResponse:
     links = await get_links()
     return SuccessResponse(links=links)
@@ -81,6 +73,20 @@ async def _handle_back(cmd: Command) -> SuccessResponse:
 async def _handle_quit(cmd: Command) -> SuccessResponse:
     Browser.quit()
     return SuccessResponse(message="browser closed")
+
+
+# command dispatch table (after all handlers are defined)
+HANDLERS = {
+    "navigate": _handle_navigate,
+    "click": _handle_click,
+    "type": _handle_type,
+    "wait": _handle_wait,
+    "screenshot": _handle_screenshot,
+    "save_image": _handle_save_image,
+    "get_links": _handle_get_links,
+    "back": _handle_back,
+    "quit": _handle_quit,
+}
 
 
 # ── main loop ──────────────────────────────────────────────────

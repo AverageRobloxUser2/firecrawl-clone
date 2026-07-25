@@ -41,16 +41,14 @@ def _guess_ext(content_type: str = "", url: str = "") -> str:
     return ".png"  # default
 
 
-async def download_image(url: str, tab: nd.Tab) -> str:
-    """Download a single image by URL. Return local file path."""
+async def download_image(url: str, tab) -> str:
+    """Download a single image by URL via browser. Return local file path."""
     try:
         ext = _guess_ext(url=url)
         filename = f"{uuid.uuid4()}{ext}"
         dest = _ensure_dir() / filename
 
-        resp = await tab.browser.fetch(url)
-        data = await resp.read()
-        dest.write_bytes(data)
+        await tab.download_file(url, str(dest))
         return str(dest)
     except Exception as e:
         raise ImageError(f"Failed to download {url}: {e}") from e

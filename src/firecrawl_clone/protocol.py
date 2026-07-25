@@ -36,7 +36,7 @@ class Link:
 class SuccessResponse:
     ok: bool = True
     markdown: str = ""
-    images: list[str] = field(default_factory=list)
+    images: dict[str, str] = field(default_factory=dict)  # uuid -> local path
     links: list[Link] = field(default_factory=list)
     path: str = ""          # for screenshot / save_image
     error: str = ""

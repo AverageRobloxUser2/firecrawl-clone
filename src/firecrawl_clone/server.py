@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import logging
+import traceback
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, HTTPException, Query
@@ -11,13 +12,14 @@ from fastapi.responses import Response
 
 from .session import SessionManager
 from .browser import Browser
+from .cookies import enable_cookie_blocker
 
 logger = logging.getLogger("firecrawl-clone")
 
 
-async def _with_url(name: str, data: dict) -> dict:
+async def _with_url(key: str, data: dict) -> dict:
     """Attach current URL to a response dict."""
-    url = await SessionManager.get_url(name)
+    url = await SessionManager.get_url(key)
     data["url"] = url
     return data
 
@@ -26,6 +28,10 @@ async def _with_url(name: str, data: dict) -> dict:
 async def lifespan(app: FastAPI):
     """Startup and shutdown."""
     logger.info("firecrawl-clone server starting")
+    # Load cookie blocker extension before browser starts
+    path = enable_cookie_blocker()
+    if (path / "manifest.json").is_file():
+        logger.info(f"cookie blocker extension loaded from {path}")
     yield
     await SessionManager.quit_all()
     logger.info("firecrawl-clone server stopped")
@@ -37,6 +43,19 @@ app = FastAPI(
     version="0.1.0",
     lifespan=lifespan,
 )
+
+
+# ── Exception handler — print full tracebacks to console ──────
+
+@app.exception_handler(Exception)
+async def log_errors(request, exc):
+    """Log full traceback for all unhandled exceptions."""
+    logger.error(f"Unhandled exception on {request.method} {request.url}:\n{traceback.format_exc()}")
+    return Response(
+        status_code=500,
+        content=json.dumps({"detail": str(exc)}),
+        media_type="application/json",
+    )
 
 
 # ── session management ─────────────────────────────────────────
@@ -61,6 +80,45 @@ async def delete_session(name: str):
 async def list_sessions():
     """List all active sessions."""
     return {"sessions": SessionManager.list_sessions()}
+
+
+@app.post("/api/sessions/{name}/add_tab")
+async def add_tab(name: str, url: str = Query("")):
+    """Add a new tab to a session. Returns tab index."""
+    idx = await SessionManager.add_tab(name, url)
+    return {"ok": True, "tab_index": idx, "message": f"added tab {idx} to session '{name}'"}
+
+
+@app.get("/api/sessions/{name}/tabs")
+async def list_tabs(name: str):
+    """List all tabs in a session."""
+    tabs = await SessionManager.list_tabs(name)
+    return {"ok": True, "tabs": tabs}
+
+
+@app.post("/api/sessions/{name}/switch_tab")
+async def switch_tab(name: str, tab_index: int = Query(...)):
+    """Switch the default tab for a session."""
+    ok = SessionManager.switch_tab(name, tab_index)
+    if not ok:
+        raise HTTPException(404, f"Invalid tab index: {tab_index}")
+    return {"ok": True, "message": f"switched to tab {tab_index}"}
+
+
+@app.delete("/api/sessions/{name}/tabs/{tab_index}")
+async def close_tab(name: str, tab_index: int):
+    """Close a specific tab in a session."""
+    ok = await SessionManager.close_tab(name, tab_index)
+    if not ok:
+        raise HTTPException(404, f"Invalid tab index: {tab_index}")
+    return {"ok": True, "message": f"closed tab {tab_index} in session '{name}'"}
+
+
+@app.post("/api/sessions/{name}/detect_tabs")
+async def detect_tabs(name: str):
+    """Detect and add newly opened browser tabs to the session."""
+    new = await SessionManager.detect_new_tabs(name)
+    return {"ok": True, "new_tabs": new, "message": f"found {len(new)} new tab(s)"}
 
 
 @app.post("/api/quit")
@@ -95,10 +153,12 @@ async def back_session(name: str):
 # ── interaction ────────────────────────────────────────────────
 
 @app.post("/api/sessions/{name}/click")
-async def click_session(name: str, selector: str = Query(...)):
-    """Click an element by CSS selector."""
+async def click_session(name: str, selector: str = Query(""), by_text: str = Query("")):
+    """Click an element by CSS selector or visible text."""
+    if not selector and not by_text:
+        raise HTTPException(400, "must provide selector or by_text")
     try:
-        result = await SessionManager.click(name, selector)
+        result = await SessionManager.click(name, selector, by_text)
         return await _with_url(name, result)
     except Exception as e:
         raise HTTPException(500, str(e))
@@ -119,6 +179,16 @@ async def wait_session(name: str, selector: str = Query(""), timeout: int = Quer
     """Wait for an element by CSS selector, or wait for URL to change."""
     try:
         result = await SessionManager.wait_for(name, selector, timeout, url_change)
+        return await _with_url(name, result)
+    except Exception as e:
+        raise HTTPException(500, str(e))
+
+
+@app.get("/api/sessions/{name}/loading")
+async def loading_session(name: str):
+    """Get current page loading state. Returns whether page/iframes are still loading."""
+    try:
+        result = await SessionManager.get_loading_state(name)
         return await _with_url(name, result)
     except Exception as e:
         raise HTTPException(500, str(e))
@@ -208,6 +278,91 @@ async def save_image_session(name: str, uuid: str = Query(...)):
     except HTTPException:
         raise
     except Exception as e:
+        raise HTTPException(500, str(e))
+
+
+# ── Action logging ─────────────────────────────────────────────
+
+@app.post("/api/sessions/{name}/action_log/on")
+async def action_log_on(name: str, log_response_mimes: str | None = Query(None)):
+    """Enable action logging for a session.
+
+    Args:
+        name: Session name
+        log_response_mimes: Comma-separated extra MIME type prefixes to log
+                            (e.g. "image/png,video/mp4"). By default only text/json/xml.
+    """
+    try:
+        result = await SessionManager.action_log_on(name, log_response_mimes=log_response_mimes)
+        if not result.get("ok"):
+            raise HTTPException(500, result.get("error", "unknown"))
+        return result
+    except HTTPException:
+        raise
+    except Exception as e:
+        traceback.print_exc()
+        raise HTTPException(500, str(e))
+
+
+@app.post("/api/sessions/{name}/action_log/off")
+async def action_log_off(name: str):
+    """Disable action logging for a session. Returns summary."""
+    try:
+        result = await SessionManager.action_log_off(name)
+        if not result.get("ok"):
+            raise HTTPException(500, result.get("error", "unknown"))
+        return result
+    except HTTPException:
+        raise
+    except Exception as e:
+        traceback.print_exc()
+        raise HTTPException(500, str(e))
+
+
+@app.get("/api/sessions/{name}/action_log/export")
+async def action_log_export(
+    name: str,
+    include_bodies: bool = Query(True),
+    filter_actions: str | None = Query(None),
+    filter_urls: str | None = Query(None),
+):
+    """Export action log data as JSON.
+
+    Args:
+        name: Session name
+        include_bodies: Include request/response bodies (default: True)
+        filter_actions: Comma-separated action names to include
+        filter_urls: Comma-separated URL regex patterns to include
+    """
+    try:
+        result = await SessionManager.action_log_export(
+            name,
+            include_bodies=include_bodies,
+            filter_actions=filter_actions,
+            filter_urls=filter_urls,
+        )
+        if not result.get("ok"):
+            raise HTTPException(500, result.get("error", "unknown"))
+        return result
+    except HTTPException:
+        raise
+    except Exception as e:
+        traceback.print_exc()
+        raise HTTPException(500, str(e))
+
+
+@app.post("/api/sessions/{name}/action_log/clear")
+async def action_log_clear(name: str):
+    """Clear action log data."""
+    try:
+        result = await SessionManager.action_log_clear(name)
+        if not result.get("ok"):
+            raise HTTPException(500, result.get("error", "unknown"))
+        return result
+    except HTTPException:
+        raise
+    except Exception as e:
+        traceback.print_exc()
         raise HTTPException(500, str(e))
 
 

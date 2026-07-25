@@ -9,6 +9,8 @@ Usage:
     firecrawl screenshot -s mybot -o page.png
     firecrawl links -s mybot
     firecrawl save-image -s mybot <uuid> -o photo.png
+    firecrawl action-log on -s mybot
+    firecrawl action-log export -s mybot -o trace.json
     firecrawl session close mybot
     firecrawl session list
 """
@@ -17,12 +19,13 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
 from pathlib import Path
 
 import httpx
 
-DEFAULT_API = "http://localhost:3001"
+DEFAULT_API = os.environ.get("FIRECRAWL_API", "http://192.168.32.71:42069")
 
 
 def _client(base: str) -> httpx.Client:
@@ -61,6 +64,59 @@ def cmd_session_list(args):
         print(s)
 
 
+def cmd_session_list_tabs(args):
+    """List tabs in a session."""
+    r = _client(args.api).get(f"/api/sessions/{args.name}/tabs")
+    if r.status_code != 200:
+        print(f"error: {r.text}", file=sys.stderr)
+        sys.exit(1)
+    for t in r.json().get("tabs", []):
+        default = " *" if t.get("is_default") else ""
+        print(f"  tab {t['index']}{default}  {t['title']}")
+        print(f"         {t['url']}")
+
+
+def cmd_session_add_tab(args):
+    """Add a new tab to a session."""
+    r = _client(args.api).post(f"/api/sessions/{args.name}/add_tab", params={"url": args.url or ""})
+    if r.status_code != 200:
+        print(f"error: {r.text}", file=sys.stderr)
+        sys.exit(1)
+    data = r.json()
+    print(f"added tab {data['tab_index']}")
+
+
+def cmd_session_switch(args):
+    """Switch default tab in a session."""
+    r = _client(args.api).post(f"/api/sessions/{args.name}/switch_tab", params={"tab_index": args.tab})
+    if r.status_code != 200:
+        print(f"error: {r.text}", file=sys.stderr)
+        sys.exit(1)
+    print(f"switched to tab {args.tab}")
+
+
+def cmd_session_close_tab(args):
+    """Close a tab in a session."""
+    r = _client(args.api).delete(f"/api/sessions/{args.name}/tabs/{args.tab}")
+    if r.status_code != 200:
+        print(f"error: {r.text}", file=sys.stderr)
+        sys.exit(1)
+    print(f"closed tab {args.tab}")
+
+
+def cmd_session_detect_tabs(args):
+    """Detect newly opened browser tabs."""
+    r = _client(args.api).post(f"/api/sessions/{args.name}/detect_tabs")
+    if r.status_code != 200:
+        print(f"error: {r.text}", file=sys.stderr)
+        sys.exit(1)
+    data = r.json()
+    if data.get("new_tabs"):
+        print(f"found {len(data['new_tabs'])} new tab(s): {data['new_tabs']}")
+    else:
+        print("no new tabs")
+
+
 def cmd_navigate(args):
     """Navigate to URL, print markdown."""
     r = _client(args.api).post(
@@ -84,17 +140,39 @@ def cmd_navigate(args):
 
 def cmd_click(args):
     """Click an element, print new markdown."""
+    params = {}
+    if args.text:
+        params["by_text"] = args.text
+    elif args.selector:
+        params["selector"] = args.selector
+    else:
+        print("error: must provide selector or --text", file=sys.stderr)
+        sys.exit(1)
     r = _client(args.api).post(
         f"/api/sessions/{args.session}/click",
-        params={"selector": args.selector},
+        params=params,
     )
     if r.status_code != 200:
         print(f"error: {r.text}", file=sys.stderr)
         sys.exit(1)
     data = r.json()
+    # Auto-detect new tabs after click
+    session_name = args.session.rsplit(":", 1)[0]  # strip tab index if present
+    detect = _client(args.api).post(f"/api/sessions/{session_name}/detect_tabs")
+    if detect.status_code == 200:
+        new = detect.json().get("new_tabs", [])
+        if new:
+            print(f"(new tab(s) opened: {new})", file=sys.stderr)
     print(f"url: {data.get('url', '')}")
     if "error" in data:
-        print(f"click failed: {data['error']}", file=sys.stderr)
+        avail = data.get("available")
+        if avail:
+            print(f"click failed: {data['error']}", file=sys.stderr)
+            print("available buttons:", file=sys.stderr)
+            for b in avail:
+                print(f"  - {b}", file=sys.stderr)
+        else:
+            print(f"click failed: {data['error']}", file=sys.stderr)
         sys.exit(1)
     print(data.get("markdown", ""))
 
@@ -148,16 +226,18 @@ def cmd_wait(args):
 
 
 def cmd_screenshot(args):
-    """Take a screenshot."""
+    """Take a screenshot. Saves to /tmp/<session>-<uuid>.png if no output specified."""
+    import uuid as _uuid
     r = _client(args.api).get(f"/api/sessions/{args.session}/screenshot")
     if r.status_code != 200:
         print(f"error: {r.text}", file=sys.stderr)
         sys.exit(1)
     if args.output:
-        Path(args.output).write_bytes(r.content)
-        print(f"screenshot saved to {args.output}")
+        path = Path(args.output)
     else:
-        print(r.content, file=sys.stdout.buffer)
+        path = Path(f"/tmp/{args.session}-{_uuid.uuid4().hex[:8]}.png")
+    path.write_bytes(r.content)
+    print(f"screenshot saved to {path}")
 
 
 def cmd_links(args):
@@ -208,6 +288,18 @@ def cmd_url(args):
         print(f"error: {r.text}", file=sys.stderr)
         sys.exit(1)
     print(r.json().get("url", ""))
+
+
+def cmd_loading(args):
+    """Print current page loading state."""
+    r = _client(args.api).get(f"/api/sessions/{args.session}/loading")
+    if r.status_code != 200:
+        print(f"error: {r.text}", file=sys.stderr)
+        sys.exit(1)
+    data = r.json()
+    print(f"ready_state: {data.get('ready_state', '')}")
+    print(f"frames_pending: {data.get('frames_pending', 0)}")
+    print(f"is_loading: {data.get('is_loading', '')}")
 
 
 def cmd_elements(args):
@@ -289,6 +381,63 @@ def cmd_quit(args):
         sys.exit(1)
 
 
+def cmd_action_log_on(args):
+    """Enable action logging."""
+    params = {}
+    if args.log_mimes:
+        params["log_response_mimes"] = args.log_mimes
+    r = _client(args.api).post(f"/api/sessions/{args.session}/action_log/on", params=params)
+    if r.status_code != 200:
+        print(f"error: {r.text}", file=sys.stderr)
+        sys.exit(1)
+    print("action logging enabled")
+
+
+def cmd_action_log_off(args):
+    """Disable action logging."""
+    r = _client(args.api).post(f"/api/sessions/{args.session}/action_log/off")
+    if r.status_code != 200:
+        print(f"error: {r.text}", file=sys.stderr)
+        sys.exit(1)
+    data = r.json()
+    summary = data.get("summary", {})
+    print(f"action logging disabled.")
+    print(f"  actions: {summary.get('actions', 0)}")
+    print(f"  network requests: {summary.get('network_completed', 0)}")
+    print(f"  response bodies captured: {summary.get('response_bodies_captured', 0)}")
+    print(f"  response bodies skipped: {summary.get('response_bodies_skipped', 0)}")
+
+
+def cmd_action_log_export(args):
+    """Export action log data."""
+    params = {
+        "include_bodies": "false" if getattr(args, 'no_bodies', False) else "true",
+    }
+    if args.filter_actions:
+        params["filter_actions"] = args.filter_actions
+    if args.filter_urls:
+        params["filter_urls"] = args.filter_urls
+    r = _client(args.api).get(f"/api/sessions/{args.session}/action_log/export", params=params)
+    if r.status_code != 200:
+        print(f"error: {r.text}", file=sys.stderr)
+        sys.exit(1)
+    data = r.json()
+    if args.output:
+        Path(args.output).write_text(json.dumps(data, indent=2))
+        print(f"action log exported to {args.output}")
+    else:
+        print(json.dumps(data, indent=2))
+
+
+def cmd_action_log_clear(args):
+    """Clear action log data."""
+    r = _client(args.api).post(f"/api/sessions/{args.session}/action_log/clear")
+    if r.status_code != 200:
+        print(f"error: {r.text}", file=sys.stderr)
+        sys.exit(1)
+    print("action log cleared")
+
+
 def main():
     parser = argparse.ArgumentParser(
         description="firecrawl-clone CLI — browser automation",
@@ -296,18 +445,28 @@ def main():
         epilog="""
 Examples:
   firecrawl session create bot
+  firecrawl session list-tabs bot
+  firecrawl session add-tab bot "https://example.com"
+  firecrawl session switch bot 2
   firecrawl navigate -s bot "https://example.com"
+  firecrawl navigate -s bot:2 "https://other.com"     # specific tab
   firecrawl click -s bot "#search"
+  firecrawl click -s bot --text "Sign In"              # click by text
   firecrawl type -s bot "#q" "hello world"
-  firecrawl click -s bot "button[type=submit]"
-  firecrawl screenshot -s bot -o page.png
+  firecrawl wait -s bot --url-change                    # wait for navigation
+  firecrawl loading -s bot                              # page load state
+  firecrawl screenshot -s bot                           # auto-saves to /tmp/
+  firecrawl screenshot -s bot -o page.png               # custom path
   firecrawl links -s bot
   firecrawl elements -s bot
   firecrawl query -s bot "input[type=email]"
   firecrawl evaluate -s bot "document.title"
   firecrawl save-image -s bot <uuid> -o img.png
+  firecrawl action-log on -s bot                            # start action logging
+  firecrawl navigate -s bot "https://app.example.com"       # actions auto-log
+  firecrawl action-log export -s bot -o trace.json          # export with initiator stacks
   firecrawl session close bot
-""",
+"""
     )
     parser.add_argument("--api", default=DEFAULT_API, help="API server URL")
 
@@ -328,6 +487,29 @@ Examples:
     p = sess_sub.add_parser("list", help="List sessions")
     p.set_defaults(func=cmd_session_list)
 
+    p = sess_sub.add_parser("list-tabs", help="List tabs in a session")
+    p.add_argument("name")
+    p.set_defaults(func=cmd_session_list_tabs)
+
+    p = sess_sub.add_parser("add-tab", help="Add new tab to session")
+    p.add_argument("name")
+    p.add_argument("url", nargs="?", default="", help="URL to navigate to")
+    p.set_defaults(func=cmd_session_add_tab)
+
+    p = sess_sub.add_parser("close-tab", help="Close a tab")
+    p.add_argument("name")
+    p.add_argument("tab", type=int, help="Tab index (1-based)")
+    p.set_defaults(func=cmd_session_close_tab)
+
+    p = sess_sub.add_parser("switch", help="Switch default tab")
+    p.add_argument("name")
+    p.add_argument("tab", type=int, help="Tab index (1-based)")
+    p.set_defaults(func=cmd_session_switch)
+
+    p = sess_sub.add_parser("detect-tabs", help="Detect newly opened browser tabs")
+    p.add_argument("name")
+    p.set_defaults(func=cmd_session_detect_tabs)
+
     # navigate
     p = sub.add_parser("navigate", help="Navigate to URL")
     p.add_argument("-s", "--session", required=True)
@@ -339,7 +521,8 @@ Examples:
     # click
     p = sub.add_parser("click", help="Click element")
     p.add_argument("-s", "--session", required=True)
-    p.add_argument("selector")
+    p.add_argument("selector", nargs="?", default="", help="CSS selector")
+    p.add_argument("-t", "--text", help="Click by visible text instead of selector")
     p.set_defaults(func=cmd_click)
 
     # type
@@ -403,6 +586,11 @@ Examples:
     p.add_argument("-s", "--session", required=True)
     p.set_defaults(func=cmd_url)
 
+    # loading
+    p = sub.add_parser("loading", help="Get page loading state")
+    p.add_argument("-s", "--session", required=True)
+    p.set_defaults(func=cmd_loading)
+
     # back
     p = sub.add_parser("back", help="Go back")
     p.add_argument("-s", "--session", required=True)
@@ -412,18 +600,40 @@ Examples:
     p = sub.add_parser("quit", help="Close browser")
     p.set_defaults(func=cmd_quit)
 
+    # action-log
+    p = sub.add_parser("action-log", help="Log browser actions + network requests")
+    p.add_argument("action", choices=["on", "off"])
+    p.add_argument("-s", "--session", required=True)
+    p.add_argument("--log-mimes", help="Extra MIME types to capture responses for (comma-separated)")
+    p.set_defaults(func=lambda args: cmd_action_log_on(args) if args.action == "on" else cmd_action_log_off(args))
+
+    # action-log-export
+    p = sub.add_parser("action-log-export", help="Export action log")
+    p.add_argument("-s", "--session", required=True)
+    p.add_argument("-o", "--output", help="Save to file")
+    p.add_argument("--no-bodies", action="store_true", help="Exclude bodies from output")
+    p.add_argument("--filter-actions", help="Only include these action names (comma-separated)")
+    p.add_argument("--filter-urls", help="Only include these URL patterns (comma-separated regex)")
+    p.set_defaults(func=cmd_action_log_export)
+
+    # action-log-clear
+    p = sub.add_parser("action-log-clear", help="Clear action log data")
+    p.add_argument("-s", "--session", required=True)
+    p.set_defaults(func=cmd_action_log_clear)
+
     args = parser.parse_args()
     if not args.cmd:
         parser.print_help()
         sys.exit(1)
 
     if args.cmd == "session" and not hasattr(args, "subcmd"):
-        print("usage: firecrawl session {create,close,list}", file=sys.stderr)
+        print("usage: firecrawl session {create,close,list,list-tabs,add-tab,close-tab,switch,detect-tabs}", file=sys.stderr)
         sys.exit(1)
 
     if args.cmd == "session":
         # session subcommands don't have --api at args level
-        args.api = args.api if hasattr(args, "api") else DEFAULT_API
+        if not hasattr(args, "api"):
+            args.api = DEFAULT_API
 
     args.func(args)
 

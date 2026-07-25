@@ -71,6 +71,7 @@ def cmd_navigate(args):
         print(f"error: {r.text}", file=sys.stderr)
         sys.exit(1)
     data = r.json()
+    print(f"url: {data.get('url', '')}")
     if args.links:
         for link in data.get("links", []):
             print(f"[{link['text']}]({link['url']})")
@@ -91,6 +92,7 @@ def cmd_click(args):
         print(f"error: {r.text}", file=sys.stderr)
         sys.exit(1)
     data = r.json()
+    print(f"url: {data.get('url', '')}")
     if "error" in data:
         print(f"click failed: {data['error']}", file=sys.stderr)
         sys.exit(1)
@@ -107,6 +109,7 @@ def cmd_type(args):
         print(f"error: {r.text}", file=sys.stderr)
         sys.exit(1)
     data = r.json()
+    print(f"url: {data.get('url', '')}")
     if data.get("ok"):
         print("ok")
     else:

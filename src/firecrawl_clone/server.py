@@ -15,6 +15,13 @@ from .browser import Browser
 logger = logging.getLogger("firecrawl-clone")
 
 
+async def _with_url(name: str, data: dict) -> dict:
+    """Attach current URL to a response dict."""
+    url = await SessionManager.get_url(name)
+    data["url"] = url
+    return data
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Startup and shutdown."""
@@ -70,7 +77,7 @@ async def navigate_session(name: str, url: str = Query(...)):
     """Navigate session's tab to a URL. Returns markdown, links, images."""
     try:
         result = await SessionManager.navigate(name, url)
-        return {"ok": True, **result}
+        return await _with_url(name, {"ok": True, **result})
     except Exception as e:
         raise HTTPException(500, str(e))
 
@@ -80,7 +87,7 @@ async def back_session(name: str):
     """Go back in session's tab history."""
     try:
         result = await SessionManager.go_back(name)
-        return {"ok": True, **result}
+        return await _with_url(name, {"ok": True, **result})
     except Exception as e:
         raise HTTPException(500, str(e))
 
@@ -92,7 +99,7 @@ async def click_session(name: str, selector: str = Query(...)):
     """Click an element by CSS selector."""
     try:
         result = await SessionManager.click(name, selector)
-        return result
+        return await _with_url(name, result)
     except Exception as e:
         raise HTTPException(500, str(e))
 
@@ -102,7 +109,7 @@ async def type_session(name: str, selector: str = Query(...), text: str = Query(
     """Type text into an element by CSS selector."""
     try:
         result = await SessionManager.type_text(name, selector, text)
-        return result
+        return await _with_url(name, result)
     except Exception as e:
         raise HTTPException(500, str(e))
 
@@ -112,7 +119,7 @@ async def wait_session(name: str, selector: str = Query(""), timeout: int = Quer
     """Wait for an element by CSS selector, or wait for URL to change."""
     try:
         result = await SessionManager.wait_for(name, selector, timeout, url_change)
-        return result
+        return await _with_url(name, result)
     except Exception as e:
         raise HTTPException(500, str(e))
 
@@ -122,7 +129,7 @@ async def elements_session(name: str):
     """Get interactive elements (inputs, buttons, selects, textareas) on current page."""
     try:
         elements = await SessionManager.get_elements(name)
-        return {"ok": True, "elements": elements}
+        return await _with_url(name, {"ok": True, "elements": elements})
     except Exception as e:
         raise HTTPException(500, str(e))
 
@@ -132,7 +139,7 @@ async def evaluate_session(name: str, script: str = Query(...)):
     """Evaluate JavaScript in the session's tab."""
     try:
         result = await SessionManager.evaluate(name, script)
-        return {"ok": True, "result": result}
+        return await _with_url(name, {"ok": True, "result": result})
     except Exception as e:
         raise HTTPException(500, str(e))
 
@@ -142,7 +149,7 @@ async def query_session(name: str, selector: str = Query(...)):
     """Query DOM for elements matching a CSS selector."""
     try:
         results = await SessionManager.query(name, selector)
-        return {"ok": True, "results": results}
+        return await _with_url(name, {"ok": True, "results": results})
     except Exception as e:
         raise HTTPException(500, str(e))
 
@@ -152,32 +159,7 @@ async def text_session(name: str, selector: str = Query(...)):
     """Get visible text from an element."""
     try:
         text = await SessionManager.get_text(name, selector)
-        return {"ok": True, "text": text}
-    except Exception as e:
-        raise HTTPException(500, str(e))
-
-
-@app.get("/api/sessions/{name}/url")
-async def url_session(name: str):
-    """Get the current URL of the session."""
-    try:
-        url = await SessionManager.get_url(name)
-        return {"ok": True, "url": url}
-    except Exception as e:
-        raise HTTPException(500, str(e))
-
-
-@app.post("/api/sessions/{name}/evaluate")
-async def evaluate_session(name: str, script: str = Query(...)):
-    """Evaluate JavaScript in the session's tab."""
-    try:
-        session = SessionManager.get(name)
-        if not session:
-            raise HTTPException(404, f"Session not found: {name}")
-        result = await session.tab.evaluate(script)
-        return {"ok": True, "result": result}
-    except HTTPException:
-        raise
+        return await _with_url(name, {"ok": True, "text": text})
     except Exception as e:
         raise HTTPException(500, str(e))
 
@@ -199,7 +181,7 @@ async def links_session(name: str):
     """Get all links on the current page."""
     try:
         links = await SessionManager.get_links(name)
-        return {"ok": True, "links": links}
+        return await _with_url(name, {"ok": True, "links": links})
     except Exception as e:
         raise HTTPException(500, str(e))
 

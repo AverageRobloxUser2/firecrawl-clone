@@ -299,6 +299,16 @@ class ActionLog:
         if request.post_data or getattr(request, "has_post_data", False):
             await self._fetch_request_body(req_id)
 
+    def _on_request_extra_info(self, event: cdp_network.RequestWillBeSentExtraInfo) -> None:
+        """Handle Network.requestWillBeSentExtraInfo — patch in actual wire headers."""
+        req_id = str(event.request_id)
+        entry = self._entries.get(req_id)
+        if entry is None:
+            return
+        # Only replace if we got actual headers (not empty from initiator-only)
+        if event.headers:
+            entry.request_headers = dict(event.headers)
+
     async def _on_response(self, event: cdp_network.ResponseReceived, tab=None) -> None:
         """Handle Network.responseReceived event — capture headers + body."""
         use_tab = tab or self._tab
@@ -313,6 +323,12 @@ class ActionLog:
         entry.reason_phrase = response.status_text or ""
         entry.response_headers = dict(response.headers) if response.headers else {}
         entry.mime_type = response.mime_type or ""
+
+        # Patch in refined request headers from response (headers actually sent over wire)
+        # This is a fallback if RequestWillBeSentExtraInfo didn't fire or fired before _on_request
+        refined_headers = getattr(response, "request_headers", None)
+        if refined_headers and dict(refined_headers):
+            entry.request_headers = dict(refined_headers)
 
         # Fetch response body immediately
         if entry.url and not entry.url.startswith(("data:", "blob:", "chrome://")):
@@ -391,6 +407,7 @@ class ActionLog:
 
         # Register event handlers after enable
         tab.add_handler(cdp_network.RequestWillBeSent, self._on_request)
+        tab.add_handler(cdp_network.RequestWillBeSentExtraInfo, self._on_request_extra_info)
         tab.add_handler(cdp_network.ResponseReceived, self._on_response)
         tab.add_handler(cdp_network.LoadingFinished, self._on_loading_finished)
         tab.add_handler(cdp_network.LoadingFailed, self._on_loading_failed)

@@ -371,6 +371,15 @@ def cmd_back(args):
     print(r.json().get("markdown", ""))
 
 
+def cmd_markdown(args):
+    """Print current page markdown without navigating."""
+    r = _client(args.api).get(f"/api/sessions/{args.session}/markdown")
+    if r.status_code != 200:
+        print(f"error: {r.text}", file=sys.stderr)
+        sys.exit(1)
+    print(r.json().get("markdown", ""))
+
+
 def cmd_quit(args):
     """Quit all sessions and browser."""
     r = _client(args.api).post("/api/quit")
@@ -594,6 +603,11 @@ Examples:
     p = sub.add_parser("back", help="Go back")
     p.add_argument("-s", "--session", required=True)
     p.set_defaults(func=cmd_back)
+
+    # markdown (print current page)
+    p = sub.add_parser("markdown", help="Print current page markdown")
+    p.add_argument("-s", "--session", required=True)
+    p.set_defaults(func=cmd_markdown)
 
     # quit
     p = sub.add_parser("quit", help="Close browser")

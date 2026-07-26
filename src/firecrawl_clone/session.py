@@ -77,6 +77,11 @@ class SessionManager:
                         await te.tab.close()
                     except Exception:
                         pass
+                # If this was the last session, clear the browser reference.
+                # nodriver kills the browser process when the last tab closes,
+                # so _instance would be stale. Browser.start() will auto-restart next time.
+                if not cls._sessions:
+                    Browser.quit()
                 return True
             return False
 
@@ -289,6 +294,12 @@ class SessionManager:
             await tab_entry.tab.sleep(1)
         except Exception as e:
             raise BrowserError(f"Failed to go back: {e}") from e
+        return await cls._page_content(session, tab_entry)
+
+    @classmethod
+    async def get_markdown(cls, key: str) -> dict[str, Any]:
+        """Get current page markdown without navigating."""
+        session, tab_entry = cls.get_tab(key)
         return await cls._page_content(session, tab_entry)
 
     @classmethod

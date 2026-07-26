@@ -13,6 +13,7 @@ from fastapi.responses import Response
 from .session import SessionManager
 from .browser import Browser
 from .cookies import enable_cookie_blocker
+from .adblock import enable_adblock
 
 logger = logging.getLogger("firecrawl-clone")
 
@@ -28,10 +29,13 @@ async def _with_url(key: str, data: dict) -> dict:
 async def lifespan(app: FastAPI):
     """Startup and shutdown."""
     logger.info("firecrawl-clone server starting")
-    # Load cookie blocker extension before browser starts
+    # Load extensions before browser starts
     path = enable_cookie_blocker()
     if (path / "manifest.json").is_file():
         logger.info(f"cookie blocker extension loaded from {path}")
+    abpath = enable_adblock()
+    if (abpath / "manifest.json").is_file():
+        logger.info(f"ad blocker extension loaded from {abpath}")
     yield
     await SessionManager.quit_all()
     logger.info("firecrawl-clone server stopped")
@@ -146,6 +150,16 @@ async def back_session(name: str):
     try:
         result = await SessionManager.go_back(name)
         return await _with_url(name, {"ok": True, **result})
+    except Exception as e:
+        raise HTTPException(500, str(e))
+
+
+@app.get("/api/sessions/{name}/markdown")
+async def markdown_session(name: str):
+    """Get current page markdown without navigating."""
+    try:
+        result = await SessionManager.get_markdown(name)
+        return await _with_url(name, result)
     except Exception as e:
         raise HTTPException(500, str(e))
 

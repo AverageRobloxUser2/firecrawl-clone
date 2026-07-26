@@ -74,7 +74,16 @@ class Browser:
         is shared across tabs in the same browser — for true session isolation
         (separate cookies), separate browser profiles would be needed."""
         browser = await cls.start()
-        return await browser.get(url, new_tab=True)
+        try:
+            return await browser.get(url, new_tab=True)
+        except Exception as e:
+            # Browser may have died between _is_alive() check and now (e.g. last tab closed).
+            # Clear stale reference and restart.
+            if "no browser is open" in str(e).lower() or "closed" in str(e).lower():
+                cls._instance = None
+                browser = await cls.start()
+                return await browser.get(url, new_tab=True)
+            raise
 
     @classmethod
     async def list_tabs(cls) -> list[nd.Tab]:

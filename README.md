@@ -7,9 +7,16 @@ Built on [nodriver](https://github.com/ultrafunkamaster/nodriver) (anti-detectio
 ## Quick Start
 
 ```bash
-# start the API server (use FIRECRAWL_HEADLESS=true on headless machines)
+# start the API server (desktop)
 source .venv/bin/activate
 uvicorn firecrawl_clone.server:app --host 0.0.0.0 --port 42069
+
+# headless (bypasses basic checks but Cloudflare-protected sites may block)
+FIRECRAWL_HEADLESS=true uvicorn firecrawl_clone.server:app --host 0.0.0.0 --port 42069
+
+# headless + Xvfb (bypasses Cloudflare — install xorg-server-xvfb first)
+Xvfb :99 -screen 0 1920x1080x24 &>/dev/null &
+DISPLAY=:99 uvicorn firecrawl_clone.server:app --host 0.0.0.0 --port 42069
 
 # in another terminal
 firecrawl session create bot
@@ -35,6 +42,7 @@ firecrawl session close bot
 - **Interactive element annotation** — markdown annotates buttons/inputs with selectors: `[button: #submit] Login`
 - **Image download** — images fetched through the browser (respects auth/cookies), saved to disk, referenced by path in markdown
 - **Cookie blocker** — loads cookie-blocking extension on startup
+- **Console output** — captures `console.log`, `console.error`, `console.warn`, `console.info`, `console.debug` from page JS, filterable by type
 - **Action logging** — logs browser actions + network requests with request/response bodies and full JS initiator stack traces for debugging automations
 - **Click by text** — `click --text "Sign In"` finds buttons by visible text content
 - **Wait for navigation** — `wait --url-change` waits for page URL to change after a click
@@ -68,6 +76,7 @@ firecrawl loading -s <session>             # page load state
 firecrawl evaluate -s <session> <js>       # evaluate JavaScript
 firecrawl back -s <session>                # go back in history
 
+firecrawl console -s <session>              # get console output (log/error/warn/etc)
 firecrawl action-log on/off -s <session>  # enable/disable action logging
 firecrawl action-log export -s <session>   # export trace (actions + network + initiator stacks)
 firecrawl action-log clear -s <session>    # clear log
@@ -121,7 +130,9 @@ GET  /api/sessions/{name}/url                    # current URL
 GET  /api/sessions/{name}/screenshot             # PNG binary
 GET  /api/sessions/{name}/links                  # page links
 GET  /api/sessions/{name}/save_image?uuid=       # image binary by UUID
+GET  /api/sessions/{name}/console?type=&count=   # console output (filter: type, count, clear)
 
+GET  /api/sessions/{name}/console?type=&count=   # console output (filter: type, count, clear)
 POST /api/sessions/{name}/action_log/on          # enable action logging
 POST /api/sessions/{name}/action_log/off         # disable action logging
 GET  /api/sessions/{name}/action_log/export      # export trace (JSON)

@@ -125,6 +125,55 @@ async def detect_tabs(name: str):
     return {"ok": True, "new_tabs": new, "message": f"found {len(new)} new tab(s)"}
 
 
+@app.get("/api/sessions/{name}/console")
+async def console_session(
+    name: str,
+    type: str = Query(None, description="Filter by type: log, error, warning, info, debug, exception"),
+    count: int = Query(100, ge=1, le=1000, description="Max messages to return"),
+    clear: bool = Query(False, description="Clear messages after reading"),
+):
+    """Get console output from session.
+
+    Filters by message type, returns most recent N messages.
+    """
+    session = SessionManager.get(name)
+    if not session:
+        raise HTTPException(404, f"Session not found: {name}")
+
+    all_messages = []
+    for te in session.tabs:
+        for msg in te.console_messages:
+            all_messages.append(SessionManager._to_dict(msg))
+
+    # Filter by type if specified
+    if type:
+        type_lower = type.lower()
+        def _msg_type(m):
+            return m.get("type_", m.get("type", "")).lower()
+        all_messages = [m for m in all_messages if _msg_type(m) == type_lower]
+
+    # Sort by timestamp (most recent last), then take last `count`
+    def _ts_key(m):
+        ts = m.get("timestamp", 0)
+        return ts if isinstance(ts, (int, float)) else 0
+    all_messages.sort(key=_ts_key)
+    recent = all_messages[-count:] if len(all_messages) > count else all_messages
+
+    # Format messages
+    formatted = [SessionManager._format_console_msg(m) for m in recent]
+
+    # Clear if requested
+    if clear:
+        for te in session.tabs:
+            te.console_messages.clear()
+
+    return {
+        "ok": True,
+        "count": len(formatted),
+        "messages": formatted,
+    }
+
+
 @app.post("/api/quit")
 async def quit_all():
     """Close all sessions and the browser."""

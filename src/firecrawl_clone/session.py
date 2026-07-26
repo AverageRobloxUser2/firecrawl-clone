@@ -17,6 +17,7 @@ from .browser import Browser
 from .clean import html_to_markdown
 from .errors import BrowserError
 from .action_log import ActionLog
+import nodriver.cdp.runtime as cdp_runtime
 
 
 @dataclass
@@ -25,6 +26,8 @@ class TabEntry:
     tab: Any  # nodriver Tab
     image_registry: dict[str, str] = field(default_factory=dict)
     action_log: ActionLog = field(default_factory=ActionLog)
+    console_messages: list[dict] = field(default_factory=list)
+    _runtime_enabled: bool = field(default=False)
 
 
 @dataclass
@@ -60,6 +63,7 @@ class SessionManager:
             tab = await Browser.new_tab()
             session = Session(name=name)
             session.add_tab(tab)  # creates tab 0, returns index 1
+            await cls._enable_runtime(tab_entry=session.tabs[0])
             cls._sessions[name] = session
             return session
 
@@ -97,6 +101,7 @@ class SessionManager:
             else:
                 tab = await Browser.new_tab()
             idx = session.add_tab(tab)
+            await cls._enable_runtime(tab_entry=session.tabs[idx - 1])
             return idx
 
     @classmethod
@@ -270,6 +275,73 @@ class SessionManager:
             "images": downloaded,
             "links": links,
             "title": title,
+        }
+
+    # ── Runtime / Console ──────────────────────────────────────
+
+    @staticmethod
+    async def _enable_runtime(tab_entry: TabEntry) -> None:
+        """Enable CDP Runtime domain and listen for console events."""
+        if tab_entry._runtime_enabled:
+            return
+        try:
+            # Enable Runtime domain
+            await tab_entry.tab.send(cdp_runtime.enable())
+
+            def _on_console(msg, tab):
+                import copy
+                tab_entry.console_messages.append(copy.deepcopy(msg))
+
+            def _get(d, key, default=None):
+                if isinstance(d, dict):
+                    return d.get(key, default)
+                return getattr(d, key, default)
+
+            def _on_exception(msg, tab):
+                import copy
+                details = _get(msg, "exceptionDetails", {})
+                exc = _get(details, "exception", {})
+                tab_entry.console_messages.append(copy.deepcopy({
+                    "type": "exception",
+                    "args": [{"value": _get(exc, "description", "Unknown error")}],
+                    "timestamp": _get(msg, "timestamp", ""),
+                }))
+
+            tab_entry.tab.add_handler(cdp_runtime.ConsoleAPICalled, _on_console)
+            tab_entry.tab.add_handler(cdp_runtime.ExceptionThrown, _on_exception)
+            tab_entry._runtime_enabled = True
+        except Exception:
+            pass  # Tab may not support CDP events yet
+
+    @staticmethod
+    def _to_dict(obj):
+        """Convert CDP objects to dicts recursively."""
+        if isinstance(obj, dict):
+            return {k: SessionManager._to_dict(v) for k, v in obj.items()}
+        if isinstance(obj, list):
+            return [SessionManager._to_dict(i) for i in obj]
+        if hasattr(obj, '__dict__'):
+            return SessionManager._to_dict(obj.__dict__)
+        return obj
+
+    @staticmethod
+    def _format_console_msg(msg) -> dict:
+        """Format a CDP console message for the API response."""
+        d = SessionManager._to_dict(msg)
+        args = []
+        for arg in d.get("args", []) or []:
+            val = arg.get("value")
+            if val is None:
+                val = arg.get("description", str(arg))
+            args.append(val)
+
+        # CDP uses 'type_' for console API type (log, error, warning, etc.)
+        msg_type = d.get("type_", d.get("type", "log"))
+
+        return {
+            "type": msg_type,
+            "message": " ".join(str(a) for a in args),
+            "timestamp": d.get("timestamp", ""),
         }
 
     # ── public API ─────────────────────────────────────────────

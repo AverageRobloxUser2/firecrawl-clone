@@ -9,6 +9,7 @@ Usage:
     firecrawl screenshot -s mybot:1 -o page.png
     firecrawl links -s mybot:1
     firecrawl save-image -s mybot:1 <uuid> -o photo.png
+    firecrawl console -s mybot:1
     firecrawl action-log on -s mybot:1
     firecrawl action-log export -s mybot:1 -o trace.json
     firecrawl session close mybot
@@ -447,6 +448,21 @@ def cmd_action_log_clear(args):
     print("action log cleared")
 
 
+def cmd_console(args):
+    """Get console output from a session/tab."""
+    # Console endpoint uses session name only (not session:tab)
+    session_name = args.session.split(":")[0] if ":" in args.session else args.session
+    r = _client(args.api).get(f"/api/sessions/{session_name}/console",
+                              params={"type": args.type, "count": args.count, "clear": args.clear})
+    r.raise_for_status()
+    data = r.json()
+    for msg in data.get("messages", []):
+        level = msg.get("type", "log").upper()
+        print(f"[{level}] {msg.get('message', '')}")
+    if not data.get("messages"):
+        print("No console messages.")
+
+
 def main():
     parser = argparse.ArgumentParser(
         description="firecrawl-clone CLI — browser automation",
@@ -612,6 +628,14 @@ Examples:
     # quit
     p = sub.add_parser("quit", help="Close browser")
     p.set_defaults(func=cmd_quit)
+
+    # console
+    p = sub.add_parser("console", help="Get console output (log/error/warn)")
+    p.add_argument("-s", "--session", required=True, help="Session:tab (e.g. bot:1)")
+    p.add_argument("--type", choices=["log", "error", "warning", "info", "debug", "exception"], default=None)
+    p.add_argument("--count", type=int, default=100, help="Max messages to return")
+    p.add_argument("--clear", action="store_true", default=False, help="Clear messages after reading")
+    p.set_defaults(func=cmd_console)
 
     # action-log
     p = sub.add_parser("action-log", help="Log browser actions + network requests")

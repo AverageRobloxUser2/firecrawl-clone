@@ -450,15 +450,26 @@ def cmd_action_log_clear(args):
 
 def cmd_console(args):
     """Get console output from a session/tab."""
-    # Console endpoint uses session name only (not session:tab)
     session_name = args.session.split(":")[0] if ":" in args.session else args.session
     r = _client(args.api).get(f"/api/sessions/{session_name}/console",
                               params={"type": args.type, "count": args.count, "clear": args.clear})
     r.raise_for_status()
     data = r.json()
     for msg in data.get("messages", []):
-        level = msg.get("type", "log").upper()
-        print(f"[{level}] {msg.get('message', '')}")
+        if args.json:
+            print(json.dumps(msg, indent=2))
+        else:
+            level = msg.get("type", "log").upper()
+            print(f"[{level}] {msg.get('message', '')}")
+            if args.trace:
+                trace = msg.get("stack_trace")
+                if trace:
+                    for frame in trace.get("call_frames", []):
+                        fn = frame.get("function_name", "")
+                        url = frame.get("url", "")
+                        line = frame.get("line_number", 0)
+                        col = frame.get("column_number", 0)
+                        print(f"    at {fn} ({url}:{line}:{col})" if fn else f"    at {url}:{line}:{col}")
     if not data.get("messages"):
         print("No console messages.")
 
@@ -635,6 +646,8 @@ Examples:
     p.add_argument("--type", choices=["log", "error", "warning", "info", "debug", "exception"], default=None)
     p.add_argument("--count", type=int, default=100, help="Max messages to return")
     p.add_argument("--clear", action="store_true", default=False, help="Clear messages after reading")
+    p.add_argument("--json", action="store_true", default=False, help="Output raw JSON for each message")
+    p.add_argument("--trace", action="store_true", default=False, help="Show stack traces")
     p.set_defaults(func=cmd_console)
 
     # action-log

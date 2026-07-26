@@ -52,6 +52,7 @@ class Browser:
             args = [
                 "--disable-gpu",
                 "--disable-dev-shm-usage",
+                "--window-size=1920,1080",
             ]
             for ext in cls._extensions:
                 args.append(f"--load-extension={ext}")

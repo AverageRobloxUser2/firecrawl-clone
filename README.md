@@ -7,8 +7,9 @@ Built on [nodriver](https://github.com/ultrafunkamaster/nodriver) (anti-detectio
 ## Quick Start
 
 ```bash
-# start the API server
-.venv/bin/firecrawl-api --port 42069
+# start the API server (use FIRECRAWL_HEADLESS=true on headless machines)
+source .venv/bin/activate
+uvicorn firecrawl_clone.server:app --host 0.0.0.0 --port 42069
 
 # in another terminal
 firecrawl session create bot

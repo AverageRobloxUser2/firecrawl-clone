@@ -86,7 +86,32 @@ async def _get_page_content(tab) -> PageResult:
 
     title = await tab.evaluate("document.title") or ""
     page_url = tab.url or ""
-    html = await tab.get_content()
+
+    # Strip elements with display:none or visibility:hidden before markdown conversion
+    html = await tab.evaluate("""
+        (() => {
+            function isVisible(el) {
+                while (el && el !== document.body) {
+                    const s = getComputedStyle(el);
+                    if (s.display === 'none' || s.visibility === 'hidden') return false;
+                    el = el.parentElement;
+                }
+                return true;
+            }
+            const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_ELEMENT);
+            const toRemove = [];
+            let node = walker.currentNode;
+            while (node) {
+                if (!isVisible(node)) {
+                    toRemove.push(node);
+                }
+                node = walker.nextNode();
+            }
+            toRemove.forEach(el => el.remove());
+            return document.documentElement.outerHTML;
+        })()
+    """)
+    html = html
 
     # convert HTML to markdown, get image UUIDs
     markdown, image_urls = html_to_markdown(html, base_url=page_url, clean=True)

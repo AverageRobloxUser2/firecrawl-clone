@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import json
 import logging
+import os
+import sys
 import traceback
 from contextlib import asynccontextmanager
 
@@ -179,6 +181,15 @@ async def quit_all():
     """Close all sessions and the browser."""
     await SessionManager.quit_all()
     return {"ok": True, "message": "all sessions closed, browser quit"}
+
+
+@app.post("/api/server/restart")
+async def server_restart():
+    """Gracefully restart the server."""
+    await SessionManager.quit_all()
+    proc = sys.executable
+    args = [proc] + sys.argv
+    os.execv(proc, args)
 
 
 # ── navigation ─────────────────────────────────────────────────

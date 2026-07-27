@@ -514,7 +514,6 @@ Examples:
   firecrawl session list-tabs bot                           # see all tabs
   firecrawl navigate -s bot:2 "https://jsonplaceholder.com" # navigate tab 2
   firecrawl session close-tab bot 2                         # close tab 2
-  firecrawl session switch bot 1                            # switch to tab 1
 
   # Interaction (on current tab)
   firecrawl click -s bot:1 "#search"

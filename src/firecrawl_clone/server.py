@@ -102,15 +102,6 @@ async def list_tabs(name: str):
     return {"ok": True, "tabs": tabs}
 
 
-@app.post("/api/sessions/{name}/switch_tab")
-async def switch_tab(name: str, tab_index: int = Query(...)):
-    """Switch the default tab for a session."""
-    ok = SessionManager.switch_tab(name, tab_index)
-    if not ok:
-        raise HTTPException(404, f"Invalid tab index: {tab_index}")
-    return {"ok": True, "message": f"switched to tab {tab_index}"}
-
-
 @app.delete("/api/sessions/{name}/tabs/{tab_index}")
 async def close_tab(name: str, tab_index: int):
     """Close a specific tab in a session."""

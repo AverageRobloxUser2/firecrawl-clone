@@ -87,15 +87,6 @@ def cmd_session_add_tab(args):
     print(f"added tab {data['tab_index']}")
 
 
-def cmd_session_switch(args):
-    """Switch default tab in a session."""
-    r = _client(args.api).post(f"/api/sessions/{args.name}/switch_tab", params={"tab_index": args.tab})
-    if r.status_code != 200:
-        print(f"error: {r.text}", file=sys.stderr)
-        sys.exit(1)
-    print(f"switched to tab {args.tab}")
-
-
 def cmd_session_close_tab(args):
     """Close a tab in a session."""
     r = _client(args.api).delete(f"/api/sessions/{args.name}/tabs/{args.tab}")
@@ -500,7 +491,6 @@ Examples:
   firecrawl session add-tab bot "https://example.com"
   firecrawl session list-tabs bot
   firecrawl session close-tab bot 1
-  firecrawl session switch bot 1
   firecrawl session detect-tabs bot
 
   # Navigation (session starts with 1 blank tab, navigate on tab 1)
@@ -581,11 +571,6 @@ Examples:
     p.add_argument("name")
     p.add_argument("tab", type=int, help="Tab index (1-based)")
     p.set_defaults(func=cmd_session_close_tab)
-
-    p = sess_sub.add_parser("switch", help="Switch default tab")
-    p.add_argument("name")
-    p.add_argument("tab", type=int, help="Tab index (1-based)")
-    p.set_defaults(func=cmd_session_switch)
 
     p = sess_sub.add_parser("detect-tabs", help="Detect newly opened browser tabs")
     p.add_argument("name")
@@ -727,7 +712,7 @@ Examples:
         sys.exit(1)
 
     if args.cmd == "session" and not hasattr(args, "subcmd"):
-        print("usage: firecrawl session {create,close,list,list-tabs,add-tab,close-tab,switch,detect-tabs}", file=sys.stderr)
+        print("usage: firecrawl session {create,close,list,list-tabs,add-tab,close-tab,detect-tabs}", file=sys.stderr)
         sys.exit(1)
 
     if args.cmd == "session":

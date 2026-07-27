@@ -152,11 +152,6 @@ class SessionManager:
             return True
 
     @classmethod
-    def switch_tab(cls, name: str, tab_index: int) -> bool:
-        """Deprecated — tab is always specified explicitly. Kept for compat."""
-        return True  # no-op
-
-    @classmethod
     async def list_tabs(cls, name: str) -> list[dict[str, Any]]:
         """List all tabs in a session with index, title, url."""
         session = cls._sessions.get(name)

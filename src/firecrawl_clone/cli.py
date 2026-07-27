@@ -503,13 +503,20 @@ Examples:
   firecrawl session switch bot 1
   firecrawl session detect-tabs bot
 
-  # Navigation
+  # Navigation (session starts with 1 blank tab, navigate on tab 1)
   firecrawl navigate -s bot:1 "https://example.com"
   firecrawl back -s bot:1
   firecrawl url -s bot:1
   firecrawl loading -s bot:1
 
-  # Interaction
+  # Multi-tab (add more tabs, navigate each independently)
+  firecrawl session add-tab bot "https://example.com"      # adds tab 2
+  firecrawl session list-tabs bot                           # see all tabs
+  firecrawl navigate -s bot:2 "https://jsonplaceholder.com" # navigate tab 2
+  firecrawl session close-tab bot 2                         # close tab 2
+  firecrawl session switch bot 1                            # switch to tab 1
+
+  # Interaction (on current tab)
   firecrawl click -s bot:1 "#search"
   firecrawl click -s bot:1 --text "Sign In"
   firecrawl type -s bot:1 "#q" "hello world"

@@ -489,6 +489,9 @@ def main():
         description="firecrawl-clone CLI — browser automation",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
+Note: examples below use `firecrawl` as if it's in PATH.
+Real path: /home/bfg/projects/firecrawl-clone/.venv/bin/firecrawl
+
 Examples:
   # Session management
   firecrawl session create bot

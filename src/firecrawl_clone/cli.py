@@ -490,27 +490,54 @@ def main():
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
+  # Session management
   firecrawl session create bot
-  firecrawl session list-tabs bot
+  firecrawl session list
+  firecrawl session close bot
   firecrawl session add-tab bot "https://example.com"
+  firecrawl session list-tabs bot
+  firecrawl session close-tab bot 1
+  firecrawl session switch bot 1
+  firecrawl session detect-tabs bot
+
+  # Navigation
   firecrawl navigate -s bot:1 "https://example.com"
-  firecrawl navigate -s bot:2 "https://other.com"     # specific tab
+  firecrawl back -s bot:1
+  firecrawl url -s bot:1
+  firecrawl loading -s bot:1
+
+  # Interaction
   firecrawl click -s bot:1 "#search"
-  firecrawl click -s bot:1 --text "Sign In"            # click by text
+  firecrawl click -s bot:1 --text "Sign In"
   firecrawl type -s bot:1 "#q" "hello world"
-  firecrawl wait -s bot:1 --url-change                  # wait for navigation
-  firecrawl loading -s bot:1                            # page load state
-  firecrawl screenshot -s bot:1                         # auto-saves to /tmp/
-  firecrawl screenshot -s bot:1 -o page.png             # custom path
+  firecrawl wait -s bot:1 "#results"              # wait for element
+  firecrawl wait -s bot:1 --url-change             # wait for navigation
+  firecrawl evaluate -s bot:1 "document.title"
+
+  # Content extraction
+  firecrawl markdown -s bot:1
+  firecrawl screenshot -s bot:1                    # saves to /tmp/<session>-<uuid>.png
+  firecrawl screenshot -s bot:1 -o page.png        # custom path
   firecrawl links -s bot:1
   firecrawl elements -s bot:1
   firecrawl query -s bot:1 "input[type=email]"
-  firecrawl evaluate -s bot:1 "document.title"
+  firecrawl text -s bot:1 "#content"
   firecrawl save-image -s bot:1 <uuid> -o img.png
-  firecrawl action-log on -s bot:1                      # start action logging
-  firecrawl navigate -s bot:1 "https://app.example.com" # actions auto-log
-  firecrawl action-log export -s bot:1 -o trace.json    # export with initiator stacks
-  firecrawl session close bot
+
+  # Action logging (debugging)
+  firecrawl action-log on -s bot:1
+  firecrawl navigate -s bot:1 "https://app.example.com"
+  firecrawl action-log export -s bot:1 -o trace.json
+  firecrawl action-log clear -s bot:1
+  firecrawl action-log off -s bot:1
+
+  # Console
+  firecrawl console -s bot:1
+  firecrawl console -s bot:1 --type error
+
+  # Server
+  firecrawl quit              # close all sessions + browser
+  firecrawl restart           # hot-restart server
 """
     )
     parser.add_argument("--api", default=DEFAULT_API, help="API server URL")

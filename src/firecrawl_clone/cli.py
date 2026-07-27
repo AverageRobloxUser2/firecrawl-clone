@@ -391,6 +391,16 @@ def cmd_quit(args):
         sys.exit(1)
 
 
+def cmd_restart(args):
+    """Restart the server."""
+    r = _client(args.api).post("/api/server/restart")
+    if r.status_code == 200:
+        print("server restarting...")
+    else:
+        print(f"error: {r.text}", file=sys.stderr)
+        sys.exit(1)
+
+
 def cmd_action_log_on(args):
     """Enable action logging."""
     params = {}
@@ -639,6 +649,10 @@ Examples:
     # quit
     p = sub.add_parser("quit", help="Close browser")
     p.set_defaults(func=cmd_quit)
+
+    # restart
+    p = sub.add_parser("restart", help="Restart the server")
+    p.set_defaults(func=cmd_restart)
 
     # console
     p = sub.add_parser("console", help="Get console output (log/error/warn)")
